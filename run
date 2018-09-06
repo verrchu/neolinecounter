@@ -1,16 +1,25 @@
 #! /usr/bin/env escript
 
 -record(file_info, {name, size, line_number, line_lengths, type}).
+-record(state, {result = #{}}).
 
 main([]) ->
     {ok, CurDir} = file:get_cwd(),
     process_dir(CurDir, self()),
-    loop().
+    loop(#state{}).
 
-loop() ->
+loop(#state{result = Result}) ->
     receive
-        X -> io:format("rec ~p~n", [X]),
-             loop()
+        {file_processed, FileInfo} ->
+            Ext = FileInfo#file_info.type,
+            LN = FileInfo#file_info.line_number,
+            NewResult = case maps:get(Ext, Result, empty) of
+                           empty -> maps:put(Ext, LN, Result);
+                           N -> maps:put(Ext, LN + N, Result)
+                       end,
+            loop(#state{result = NewResult})
+    after 100 ->
+              io:format("~p~n", [Result])
     end.
 
 process_dir(DirName, Receiver) ->
@@ -30,11 +39,11 @@ process_file(FileName, Receiver) ->
     Size = get_size(FileName),
     {LineNumber, LineLengths} = process_lines(FileName),
     Type = get_filetype(FileName),
-    Receiver ! #file_info{name=FileName,
-                          size=Size,
-                          line_number=LineNumber,
-                          line_lengths=LineLengths,
-                          type=Type}.
+    Receiver ! {file_processed, #file_info{name=FileName,
+                                           size=Size,
+                                           line_number=LineNumber,
+                                           line_lengths=LineLengths,
+                                           type=Type}}.
 
 process_lines(FileName) ->
     {ok, Device} = file:open(FileName, [read]),
