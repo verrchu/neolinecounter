@@ -19,8 +19,12 @@ process_dir(DirName, Receiver) ->
                                      filename:join([DirName, FileName])
                                  end, FileList),
     {Files, Dirs} = categorize(ExtendedFileList),
-    lists:foreach(fun(Dir) -> spawn(fun() -> process_dir(Dir, Receiver) end) end, Dirs),
-    lists:foreach(fun(File) -> spawn(fun() -> process_file(File, Receiver) end) end, Files).
+    lists:foreach(fun(Dir) ->
+                          spawn(fun() -> process_dir(Dir, Receiver) end)
+                  end, Dirs),
+    lists:foreach(fun(File) ->
+                          spawn(fun() -> process_file(File, Receiver) end)
+                  end, Files).
 
 process_file(FileName, Receiver) ->
     Size = get_size(FileName),
@@ -39,7 +43,8 @@ process_lines(FileName) ->
 do_process_lines(Device, {LineNumber, LineLengths}) ->
     case io:get_line(Device, "") of
         eof -> file:close(Device), {LineNumber, LineLengths};
-        Line -> do_process_lines(Device, {LineNumber + 1, [length(Line)|LineLengths]})
+        Line -> do_process_lines(Device,
+                                 {LineNumber + 1, [length(Line)|LineLengths]})
     end.
 
 get_filetype(FileName) -> 
