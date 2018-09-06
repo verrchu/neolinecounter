@@ -1,4 +1,7 @@
 #! /usr/bin/env escript
+%%! -smp enable
+
+-mode(compile).
 
 -record(file_info, {name, size, line_count, line_lengths, filetype}).
 -record(filetype_info, {file_count, line_count}).
@@ -37,7 +40,7 @@ loop(#state{info = Info}) ->
 format_output({FileType, FileTypeInfo}) ->
     #filetype_info{file_count = FileCount,
                    line_count = LineCount} = FileTypeInfo,
-    io:format("| ~p -> ", [FileType]),
+    io:format("| ~s -> ", [FileType]),
     io:format("file count: ~p | ", [FileCount]),
     io:format("line count: ~p |~n", [LineCount]).
 
