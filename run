@@ -4,28 +4,33 @@
 
 main([]) ->
     {ok, CurDir} = file:get_cwd(),
-    process_dir_recursive(CurDir).
+    process_dir(CurDir, self()),
+    loop().
 
-process_dir_recursive(DirName) ->
-    io:format("ind ~p~n", [DirName]),
+loop() ->
+    receive
+        X -> io:format("rec ~p~n", [X]),
+             loop()
+    end.
+
+process_dir(DirName, Receiver) ->
     {ok, FileList} = file:list_dir(DirName),
     ExtendedFileList = lists:map(fun(FileName) ->
                                      filename:join([DirName, FileName])
                                  end, FileList),
     {Files, Dirs} = categorize(ExtendedFileList),
-    lists:foreach(fun(Dir) -> process_dir_recursive(Dir) end, Dirs),
-    lists:foreach(fun(File) -> process_file(File) end, Files).
+    lists:foreach(fun(Dir) -> spawn(fun() -> process_dir(Dir, Receiver) end) end, Dirs),
+    lists:foreach(fun(File) -> spawn(fun() -> process_file(File, Receiver) end) end, Files).
 
-process_file(FileName) ->
-    io:format("inf ~p~n", [FileName]),
+process_file(FileName, Receiver) ->
     Size = get_size(FileName),
     {LineNumber, LineLengths} = process_lines(FileName),
     Type = get_filetype(FileName),
-    #file_info{name=FileName,
-               size=Size,
-               line_number=LineNumber,
-               line_lengths=LineLengths,
-               type=Type}.
+    Receiver ! #file_info{name=FileName,
+                          size=Size,
+                          line_number=LineNumber,
+                          line_lengths=LineLengths,
+                          type=Type}.
 
 process_lines(FileName) ->
     {ok, Device} = file:open(FileName, [read]),
