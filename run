@@ -1,26 +1,45 @@
 #! /usr/bin/env escript
 
--record(file_info, {name, size, line_number, line_lengths, type}).
--record(state, {result = #{}}).
+-record(file_info, {name, size, line_count, line_lengths, filetype}).
+-record(filetype_info, {file_count, line_count}).
+-record(state, {info = #{}}).
+
+-define(LOOP_TIMEOUT, 1000).
 
 main([]) ->
     {ok, CurDir} = file:get_cwd(),
     process_dir(CurDir, self()),
     loop(#state{}).
 
-loop(#state{result = Result}) ->
+loop(#state{info = Info}) ->
     receive
         {file_processed, FileInfo} ->
-            Ext = FileInfo#file_info.type,
-            LN = FileInfo#file_info.line_number,
-            NewResult = case maps:get(Ext, Result, empty) of
-                           empty -> maps:put(Ext, LN, Result);
-                           N -> maps:put(Ext, LN + N, Result)
+            FileType = FileInfo#file_info.filetype,
+            LineCount = FileInfo#file_info.line_count,
+            NewInfo = case maps:get(FileType, Info, empty) of
+                           empty ->
+                              NewInfo2 = #filetype_info{file_count = 1,
+                                                        line_count = LineCount},
+                              maps:put(FileType, NewInfo2, Info);
+                           OldInfo ->
+                              #filetype_info{file_count = OldFileCount,
+                                             line_count = OldLineCount} = OldInfo,
+                              NewInfo2 = #filetype_info{file_count = OldFileCount + 1,
+                                                        line_count = OldLineCount + LineCount},
+                              maps:put(FileType, NewInfo2, Info)
                        end,
-            loop(#state{result = NewResult})
-    after 100 ->
-              io:format("~p~n", [Result])
+            loop(#state{info = NewInfo})
+    after ?LOOP_TIMEOUT ->
+            InfoList = maps:to_list(Info),
+            lists:foreach(fun(X) -> format_output(X) end, InfoList)
     end.
+
+format_output({FileType, FileTypeInfo}) ->
+    #filetype_info{file_count = FileCount,
+                   line_count = LineCount} = FileTypeInfo,
+    io:format("| ~p -> ", [FileType]),
+    io:format("file count: ~p | ", [FileCount]),
+    io:format("line count: ~p |~n", [LineCount]).
 
 process_dir(DirName, Receiver) ->
     {ok, FileList} = file:list_dir(DirName),
@@ -37,23 +56,23 @@ process_dir(DirName, Receiver) ->
 
 process_file(FileName, Receiver) ->
     Size = get_size(FileName),
-    {LineNumber, LineLengths} = process_lines(FileName),
-    Type = get_filetype(FileName),
+    {LineCount, LineLengths} = process_lines(FileName),
+    FileType = get_filetype(FileName),
     Receiver ! {file_processed, #file_info{name=FileName,
                                            size=Size,
-                                           line_number=LineNumber,
+                                           line_count=LineCount,
                                            line_lengths=LineLengths,
-                                           type=Type}}.
+                                           filetype=FileType}}.
 
 process_lines(FileName) ->
     {ok, Device} = file:open(FileName, [read]),
     do_process_lines(Device, {0, []}).
 
-do_process_lines(Device, {LineNumber, LineLengths}) ->
+do_process_lines(Device, {LineCount, LineLengths}) ->
     case io:get_line(Device, "") of
-        eof -> file:close(Device), {LineNumber, LineLengths};
+        eof -> file:close(Device), {LineCount, LineLengths};
         Line -> do_process_lines(Device,
-                                 {LineNumber + 1, [length(Line)|LineLengths]})
+                                 {LineCount + 1, [length(Line)|LineLengths]})
     end.
 
 get_filetype(FileName) -> 
@@ -70,4 +89,3 @@ categorize(FileNames) ->
     Dirs = [FileName || FileName <- FileNames,
                         filelib:is_dir(FileName)],
     {Files, Dirs}.
-
