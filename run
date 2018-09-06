@@ -1,0 +1,54 @@
+#! /usr/bin/env escript
+
+-record(file_info, {name, size, line_number, line_lengths, type}).
+
+main([]) ->
+    {ok, CurDir} = file:get_cwd(),
+    process_dir_recursive(CurDir).
+
+process_dir_recursive(DirName) ->
+    io:format("ind ~p~n", [DirName]),
+    {ok, FileList} = file:list_dir(DirName),
+    ExtendedFileList = lists:map(fun(FileName) ->
+                                     filename:join([DirName, FileName])
+                                 end, FileList),
+    {Files, Dirs} = categorize(ExtendedFileList),
+    lists:foreach(fun(Dir) -> process_dir_recursive(Dir) end, Dirs),
+    lists:foreach(fun(File) -> process_file(File) end, Files).
+
+process_file(FileName) ->
+    io:format("inf ~p~n", [FileName]),
+    Size = get_size(FileName),
+    {LineNumber, LineLengths} = process_lines(FileName),
+    Type = get_filetype(FileName),
+    #file_info{name=FileName,
+               size=Size,
+               line_number=LineNumber,
+               line_lengths=LineLengths,
+               type=Type}.
+
+process_lines(FileName) ->
+    {ok, Device} = file:open(FileName, [read]),
+    do_process_lines(Device, {0, []}).
+
+do_process_lines(Device, {LineNumber, LineLengths}) ->
+    case io:get_line(Device, "") of
+        eof -> file:close(Device), {LineNumber, LineLengths};
+        Line -> do_process_lines(Device, {LineNumber + 1, [length(Line)|LineLengths]})
+    end.
+
+get_filetype(FileName) -> 
+    case filename:extension(FileName) of
+        [] -> "no filetype";
+        FileType -> FileType
+    end.
+
+get_size(FileName) -> filelib:file_size(FileName).
+
+categorize(FileNames) ->
+    Files = [FileName || FileName <- FileNames,
+                         not filelib:is_dir(FileName)],
+    Dirs = [FileName || FileName <- FileNames,
+                        filelib:is_dir(FileName)],
+    {Files, Dirs}.
+
