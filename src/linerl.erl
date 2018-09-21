@@ -1,7 +1,5 @@
-#! /usr/bin/env escript
-%%! -smp enable
-
--mode(compile).
+-module(linerl).
+-export([main/1]).
 
 -record(file_info, {name, size, line_count, line_lengths, filetype}).
 -record(filetype_info, {file_count, line_count}).
