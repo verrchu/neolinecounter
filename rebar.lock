@@ -1,1 +1,4 @@
-[].
+[{<<"cli">>,
+  {git,"https://github.com/kolinsol/erlang-cli",
+       {ref,"2f4a5697c6cbc9b8dabaa1482641765ae6618426"}},
+  0}].
