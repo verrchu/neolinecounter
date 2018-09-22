@@ -7,10 +7,9 @@
 
 -define(LOOP_TIMEOUT, 1000).
 
-main([]) ->
-    {ok, CurDir} = file:get_cwd(),
-    process_dir(CurDir, self()),
-    loop(#state{}).
+main(Args) ->
+    Parser = parser(),
+    handle_parsed(cli:parse_args(Args, Parser)).
 
 loop(#state{info = Info}=State) ->
     receive
@@ -98,3 +97,27 @@ categorize(FileNames) ->
     Dirs = [FileName || FileName <- FileNames,
                         filelib:is_dir(FileName)],
     {Files, Dirs}.
+
+parser() ->
+    cli:parser(
+      "linerl",
+      "[OPTION]...\n",
+      "line counting utility\n",
+      [{directiry, "-d, --dir",
+        "directory to analyze"},
+       {filetype, "-t, --filetype",
+        "filetypes to search for",
+        [optional_arg]}],
+      [{version, "0.0.1\n" }]).
+
+handle_parsed({{ok, print_help}, P}) ->
+    cli:print_help(P);
+handle_parsed({{ok, print_version}, P}) ->
+    cli:print_version(P);
+handle_parsed({{ok, _Parsed}, _P}) ->
+    {ok, CurDir} = file:get_cwd(),
+    process_dir(CurDir, self()),
+    loop(#state{});
+handle_parsed({{error, Err}, P}) ->
+    cli:print_error_and_halt(Err, P).
+
