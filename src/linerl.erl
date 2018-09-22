@@ -12,7 +12,7 @@ main([]) ->
     process_dir(CurDir, self()),
     loop(#state{}).
 
-loop(#state{info = Info}) ->
+loop(#state{info = Info}=State) ->
     receive
         {file_processed, FileInfo} ->
             FileType = FileInfo#file_info.filetype,
@@ -29,7 +29,10 @@ loop(#state{info = Info}) ->
                                                         line_count = OldLineCount + LineCount},
                               maps:put(FileType, NewInfo2, Info)
                        end,
-            loop(#state{info = NewInfo})
+            loop(#state{info = NewInfo});
+        {error, {Error, FileName}} ->
+            io:format("error |~p| while processing file:~n~p~n", [Error, FileName]),
+            loop(State)
     after ?LOOP_TIMEOUT ->
             InfoList = maps:to_list(Info),
             lists:foreach(fun(X) -> format_output(X) end, InfoList)
@@ -57,17 +60,22 @@ process_dir(DirName, Receiver) ->
 
 process_file(FileName, Receiver) ->
     Size = get_size(FileName),
-    {LineCount, LineLengths} = process_lines(FileName),
-    FileType = get_filetype(FileName),
-    Receiver ! {file_processed, #file_info{name=FileName,
-                                           size=Size,
-                                           line_count=LineCount,
-                                           line_lengths=LineLengths,
-                                           filetype=FileType}}.
+    Message = case file:open(FileName, [read]) of
+                  {ok, File} ->
+                      {LineCount, LineLengths} = process_lines(File),
+                      FileType = get_filetype(FileName),
+                      {file_processed, #file_info{name=FileName,
+                                                  size=Size,
+                                                  line_count=LineCount,
+                                                  line_lengths=LineLengths,
+                                                  filetype=FileType}};
+                  {error, Error} ->
+                      {error, {Error, FileName}}
+              end,
+    Receiver ! Message.
 
-process_lines(FileName) ->
-    {ok, Device} = file:open(FileName, [read]),
-    do_process_lines(Device, {0, []}).
+process_lines(File) ->
+    do_process_lines(File, {0, []}).
 
 do_process_lines(Device, {LineCount, LineLengths}) ->
     case io:get_line(Device, "") of
