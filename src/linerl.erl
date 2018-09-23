@@ -114,10 +114,12 @@ handle_parsed({{ok, print_help}, P}) ->
     cli:print_help(P);
 handle_parsed({{ok, print_version}, P}) ->
     cli:print_version(P);
-handle_parsed({{ok, _Parsed}, _P}) ->
+handle_parsed({{ok, {Opts, _Args}}, _P}) ->
+    FileTypes = proplists:get_value(filetype, Opts),
+    {match, _FileTypes2} = re:run(FileTypes, "\\w+", [global, {capture, [0], list}]),
     {ok, CurDir} = file:get_cwd(),
     process_dir(CurDir, self()),
     loop(#state{});
 handle_parsed({{error, Err}, P}) ->
-    cli:print_error_and_halt(Err, P).
+    cli:print_error(Err, P).
 
