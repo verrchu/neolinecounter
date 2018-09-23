@@ -4,14 +4,13 @@
 
 -record(file_info, {name, size, line_count, line_lengths, filetype}).
 -record(filetype_info, {file_count, line_count}).
--record(state, {info = #{}}).
+-record(state, {info = #{}, filetypes = all}).
 
 -define(LOOP_TIMEOUT, 1000).
 
-start(Opts) ->
-    io:format("OPTS: ~p~n", [Opts]),
+start(FileTypes) ->
     {ok, CurDir} = file:get_cwd(),
-    process_dir(CurDir, self()),
+    process_dir(CurDir, FileTypes, self()),
     loop(#state{}).
 
 loop(#state{info = Info}=State) ->
@@ -47,34 +46,38 @@ format_output({FileType, FileTypeInfo}) ->
     io:format("file count: ~p | ", [FileCount]),
     io:format("line count: ~p |~n", [LineCount]).
 
-process_dir(DirName, Receiver) ->
+process_dir(DirName, FileTypes, Receiver) ->
     {ok, FileList} = file:list_dir(DirName),
     ExtendedFileList = lists:map(fun(FileName) ->
                                      filename:join([DirName, FileName])
                                  end, FileList),
     {Files, Dirs} = categorize(ExtendedFileList),
     lists:foreach(fun(Dir) ->
-                          spawn(fun() -> process_dir(Dir, Receiver) end)
+                          spawn(fun() -> process_dir(Dir, FileTypes, Receiver) end)
                   end, Dirs),
     lists:foreach(fun(File) ->
-                          spawn(fun() -> process_file(File, Receiver) end)
+                          spawn(fun() -> process_file(File, FileTypes, Receiver) end)
                   end, Files).
 
-process_file(FileName, Receiver) ->
-    Size = get_size(FileName),
-    Message = case file:open(FileName, [read]) of
-                  {ok, File} ->
-                      {LineCount, LineLengths} = process_lines(File),
-                      FileType = get_filetype(FileName),
-                      {file_processed, #file_info{name=FileName,
-                                                  size=Size,
-                                                  line_count=LineCount,
-                                                  line_lengths=LineLengths,
-                                                  filetype=FileType}};
-                  {error, Error} ->
-                      {error, {Error, FileName}}
-              end,
-    Receiver ! Message.
+process_file(FileName, FileTypes, Receiver) ->
+    FileType = get_filetype(FileName),
+    case lists:member(FileType, FileTypes) orelse FileTypes == [] of
+        false -> void;
+        true ->
+            Message = case file:open(FileName, [read]) of
+                          {ok, File} ->
+                              {LineCount, LineLengths} = process_lines(File),
+                              Size = get_size(FileName),
+                              {file_processed, #file_info{name=FileName,
+                                                          size=Size,
+                                                          line_count=LineCount,
+                                                          line_lengths=LineLengths,
+                                                          filetype=FileType}};
+                          {error, Error} ->
+                              {error, {Error, FileName}}
+                      end,
+            Receiver ! Message
+    end.
 
 process_lines(File) ->
     do_process_lines(File, {0, []}).

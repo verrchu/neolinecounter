@@ -22,17 +22,19 @@ handle_parsed({{ok, print_help}, P}) ->
 handle_parsed({{ok, print_version}, P}) ->
     cli:print_version(P);
 handle_parsed({{ok, {Opts, _Args}}, _P}) ->
-    FT = parse_filetype(Opts),
-    looper:start([{ft, FT}]);
+    FileTypes = parse_filetype(Opts),
+    looper:start(FileTypes);
 handle_parsed({{error, Err}, P}) ->
     cli:print_error(Err, P).
 
 parse_filetype(Opts) ->
     case proplists:get_value(filetype, Opts) of
-        undefined -> undefined;
+        undefined -> [];
         FT ->
             {match, FT2} =
                 re:run(FT, "\\w+", [global, {capture, [0], list}]),
-            FT3 = lists:map(fun hd/1, FT2)
+            FT3 = lists:map(fun hd/1, FT2),
+            FT4 = lists:map(fun(X) -> [$. | X] end, FT3),
+            FT4
     end.
 
