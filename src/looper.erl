@@ -1,6 +1,6 @@
 -module(looper).
 
--export([start/0]).
+-export([start/1]).
 
 -record(file_info, {name, size, line_count, line_lengths, filetype}).
 -record(filetype_info, {file_count, line_count}).
@@ -8,7 +8,8 @@
 
 -define(LOOP_TIMEOUT, 1000).
 
-start() ->
+start(Opts) ->
+    io:format("OPTS: ~p~n", [Opts]),
     {ok, CurDir} = file:get_cwd(),
     process_dir(CurDir, self()),
     loop(#state{}).
