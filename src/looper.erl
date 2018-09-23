@@ -1,6 +1,6 @@
 -module(looper).
 
--export([start/1]).
+-export([start/2]).
 
 -record(file_info, {name, size, line_count, line_lengths, filetype}).
 -record(filetype_info, {file_count, line_count}).
@@ -8,9 +8,8 @@
 
 -define(LOOP_TIMEOUT, 1000).
 
-start(FileTypes) ->
-    {ok, CurDir} = file:get_cwd(),
-    process_dir(CurDir, FileTypes, self()),
+start(Dir, FileTypes) ->
+    process_dir(Dir, FileTypes, self()),
     loop(#state{}).
 
 loop(#state{info = Info}=State) ->
@@ -31,8 +30,11 @@ loop(#state{info = Info}=State) ->
                               maps:put(FileType, NewInfo2, Info)
                        end,
             loop(#state{info = NewInfo});
-        {error, {Error, FileName}} ->
+        {{error, Error}, {file, FileName}} ->
             io:format("error |~p| while processing file:~n~p~n", [Error, FileName]),
+            loop(State);
+        {{error, Error}, {dir, DirName}} ->
+            io:format("error |~p| while processing dir:~n~p~n", [Error, DirName]),
             loop(State)
     after ?LOOP_TIMEOUT ->
             InfoList = maps:to_list(Info),
@@ -47,17 +49,21 @@ format_output({FileType, FileTypeInfo}) ->
     io:format("line count: ~p |~n", [LineCount]).
 
 process_dir(DirName, FileTypes, Receiver) ->
-    {ok, FileList} = file:list_dir(DirName),
-    ExtendedFileList = lists:map(fun(FileName) ->
-                                     filename:join([DirName, FileName])
-                                 end, FileList),
-    {Files, Dirs} = categorize(ExtendedFileList),
-    lists:foreach(fun(Dir) ->
-                          spawn(fun() -> process_dir(Dir, FileTypes, Receiver) end)
-                  end, Dirs),
-    lists:foreach(fun(File) ->
-                          spawn(fun() -> process_file(File, FileTypes, Receiver) end)
-                  end, Files).
+    case file:list_dir(DirName) of
+        {ok, FileList} ->
+            ExtendedFileList = lists:map(fun(FileName) ->
+                                             filename:join([DirName, FileName])
+                                         end, FileList),
+            {Files, Dirs} = categorize(ExtendedFileList),
+            lists:foreach(fun(Dir) ->
+                                  spawn(fun() -> process_dir(Dir, FileTypes, Receiver) end)
+                          end, Dirs),
+            lists:foreach(fun(File) ->
+                                  spawn(fun() -> process_file(File, FileTypes, Receiver) end)
+                          end, Files);
+        {error, Error} ->
+            Receiver ! {{error, Error}, {dir, DirName}}
+    end.
 
 process_file(FileName, FileTypes, Receiver) ->
     FileType = get_filetype(FileName),
@@ -74,7 +80,7 @@ process_file(FileName, FileTypes, Receiver) ->
                                                           line_lengths=LineLengths,
                                                           filetype=FileType}};
                           {error, Error} ->
-                              {error, {Error, FileName}}
+                              {{error, Error}, {file, FileName}}
                       end,
             Receiver ! Message
     end.
