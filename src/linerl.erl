@@ -8,14 +8,11 @@ main(Args) ->
 parser() ->
     cli:parser(
       "linerl",
-      "[OPTION]...\n",
+      "[OPTION]...",
       "line counting utility\n",
-      [{directiry, "-d, --dir",
-        "directory to analyze"},
-       {filetype, "-t, --filetype",
-        "filetypes to search for",
-        [optional_arg]}],
-      [{version, "0.0.1\n" }]).
+      [{directiry, "-d, --dir", "directory to analyze"},
+       {filetype, "-t, --filetype", "filetypes to search for", [optional_arg]}],
+      [{version, "0.0.1\n" }, {pos_args, 1}]).
 
 handle_parsed({{ok, print_help}, P}) ->
     cli:print_help(P);
